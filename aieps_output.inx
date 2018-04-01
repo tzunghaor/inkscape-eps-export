@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+    <_name>AI compatible EPS output</_name>
+    <id>org.inkscape.output.ai_eps</id>
+    <dependency type="executable" location="extensions">aieps_output.py</dependency>
+    <output>
+        <extension>.eps</extension>
+        <mimetype>application/eps</mimetype>
+        <_filetypename>Encapsulated PostScript - AI compatible (*.eps)</_filetypename>
+        <_filetypetooltip>Adobe Illustrator 7 compatible EPS</_filetypetooltip>
+    </output>
+    <script>
+        <command reldir="extensions" interpreter="python">aieps_output.py</command>
+    </script>
+</inkscape-extension>
