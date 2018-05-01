@@ -327,7 +327,7 @@ class svg2eps:
 
         while i < len(tokens):
             token = tokens[i]
-            if token in ['m', 'M', 'c', 'C', 'l', 'L', 'z', 'Z', 'a', 'A', 'q', 'Q']:
+            if token in ['m', 'M', 'c', 'C', 'l', 'L', 'z', 'Z', 'a', 'A', 'q', 'Q', 'h', 'H', 'v', 'V']:
                 cmd = token
                 i += 1
             elif token.isalpha():
@@ -367,6 +367,20 @@ class svg2eps:
                 x, y = self.coordConv(self.curPoint[0], self.curPoint[1])
                 self.epspath += ' %f %f' % (x, y)
                 i += 2
+                self.epspath += ' l'
+                self.segmentCommands += 1
+            elif cmd in ['H', 'h', 'V', 'v']:
+                if 'H' == cmd:
+                    self.curPoint = (float(tokens[i]), self.curPoint[1])
+                elif 'h' == cmd:
+                    self.curPoint = (self.curPoint[0] + float(tokens[i]), self.curPoint[1])
+                elif 'V' == cmd:
+                    self.curPoint = (self.curPoint[0], float(tokens[i]))
+                elif 'v' == cmd:
+                    self.curPoint = (self.curPoint[0], self.curPoint[1] + float(tokens[i]))
+                x, y = self.coordConv(self.curPoint[0], self.curPoint[1])
+                self.epspath += ' %f %f' % (x, y)
+                i += 1
                 self.epspath += ' l'
                 self.segmentCommands += 1
             elif 'C' == cmd:
