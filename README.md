@@ -18,7 +18,7 @@ that the result looks different in Illustrator than in other programs.
 Copy aieps_output.inx and aieps_output.py  into the Inkscape extensions folder:
 
 * On Windows C:\\Program Files\\Inkscape\\share\\extensions
-* On Linux /usr/share/inkscape/extensions
+* On Linux /usr/share/inkscape/extensions or ~/.config/inkscape/extensions
 
 ## Known limitations
 
