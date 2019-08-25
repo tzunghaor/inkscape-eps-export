@@ -732,7 +732,12 @@ class svg2eps:
     #         self.documentUnit = newDocumentUnit
 
     def walkElem(self, elem):
-        uri, shortTag = elem.tag.split('}')
+        if '}' in elem.tag:
+            uri, shortTag = elem.tag.split('}')
+        else:
+            shortTag = elem.tag
+            uri = ''
+
         transform = elem.get('transform')
         clipPath = elem.get('clip-path')
         cssNew = css2dict(elem.get('style'))
