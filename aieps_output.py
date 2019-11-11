@@ -138,14 +138,14 @@ class svg2eps:
     def elemSvg(self, elem):
         """handles the <svg> element"""
         # DPI changed in inkscape 0.92, so set the px-to-pt rate based on inkscape version
-        self.toPt['px'] = 0.75
+        self.toPt['px'] = 1
         inkscapeVersionString = elem.get('{http://www.inkscape.org/namespaces/inkscape}version', '0.92.0')
         mobj = re.match(r'(\d+)\.(\d+)', inkscapeVersionString)
         if mobj != None:
             major = int(mobj.group(1))
             minor = int(mobj.group(2))
             if major == 0 and minor < 92:
-                self.toPt['px'] = 0.8
+                self.toPt['px'] = 1
 
         # by default (without viewbox definition) user unit = pixel
         self.toPt['uu'] = self.toPt['px']
