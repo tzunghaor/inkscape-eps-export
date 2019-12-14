@@ -691,7 +691,7 @@ class svg2eps:
                 epsGradients += ("\n%%AI5_BeginGradient: (l_%s)" + \
                     "\n(l_%s) 0 %d Bd\n[\n") % \
                     (gradientId, gradientId, len(gradient['stops']))
-                gradient['stops'].sort(lambda x,y: cmp(y[0], x[0]))
+                gradient['stops'].sort(key=lambda x: x[0], reverse=True)
 
                 for offset, color in gradient['stops']:
                     epsGradients += "%s 2 50 %f %%_Bs\n" % (color, offset)
@@ -702,7 +702,7 @@ class svg2eps:
                 epsGradients += ("\n%%AI5_BeginGradient: (r_%s)" + \
                     "\n(r_%s) 1 %d Bd\n[\n") % \
                     (gradientId, gradientId, len(gradient['stops']))
-                gradient['stops'].sort(lambda x,y: cmp(x[0], y[0]))
+                gradient['stops'].sort(key=lambda x: x[0])
 
                 for offset, color in gradient['stops']:
                     epsGradients += "%s 2 50 %f %%_Bs\n" % (color, offset)
@@ -870,7 +870,7 @@ class svg2eps:
         if None != svg:
             self.svg = svg
         if None == self.svg and None != self.filename:
-            fd = open(self.filename, 'r')
+            fd = open(self.filename, 'rb')
             self.svg = fd.read()
             fd.close()
 
@@ -1129,7 +1129,7 @@ end
 import sys
 
 if len(sys.argv) < 2:
-    print "missing filename"
+    print("missing filename")
     exit(1)
 
 converter = svg2eps(sys.argv[1])
