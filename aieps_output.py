@@ -574,7 +574,30 @@ class svg2eps:
             pathData += " L %f %f A %f %f 0 0 1 %f %f z" % (x+rx, y+height, rx,ry, x, y+height-ry)
         self.elemPath(elem, pathData)
 
+    def elemCircle(self, elem):
+        r = float(elem.get('r'))
+        self.elemEllipseCircleCommon(elem, r, r)
 
+    def elemEllipse(self, elem):
+        rx = float(elem.get('rx'))
+        ry = float(elem.get('ry'))
+        self.elemEllipseCircleCommon(elem, rx, ry)
+
+    def elemEllipseCircleCommon(self, elem, rx, ry):
+        cx = float(elem.get('cx'))
+        cy = float(elem.get('cy'))
+        # todo: test whether PostScript arc is handled by AI and use that instead
+        magic = 0.55228475 # I've read it on the internet
+        controlx = rx * magic # x distance of control points from center
+        controly = ry * magic # y distance of control points from center
+
+        # construct an svg <path> d attribute, and call self.elemPath()
+        pathData = "M %f %f" % (cx - rx, cy) # leftmost point
+        pathData += " C %f %f %f %f %f %f" % (cx - rx, cy - controly, cx - controlx, cy - ry, cx, cy - ry) # to top
+        pathData += " C %f %f %f %f %f %f" % (cx + controlx, cy - ry, cx + rx, cy - controly, cx + rx, cy) # to right
+        pathData += " C %f %f %f %f %f %f" % (cx + rx, cy + controly, cx + controlx, cy + ry, cx, cy + ry) # to bottom
+        pathData += " C %f %f %f %f %f %f z" % (cx - controlx, cy + ry, cx - rx, cy + controly, cx - rx, cy) # back to left and close
+        self.elemPath(elem, pathData)
 
 
     def attrTransform(self, matrix, transform):
@@ -749,7 +772,7 @@ class svg2eps:
                 return
             if 'display' in css and css['display'] == 'none':
                 return
-            if shortTag in ('path', 'rect'):
+            if shortTag in ('path', 'rect', 'circle', 'ellipse'):
                 if 'opacity' in css and css['opacity'] == '0':
                     return
                 stroke = False
@@ -796,6 +819,12 @@ class svg2eps:
         elif 'rect' == shortTag:
             if self.section != 'defs':
                 self.elemRect(elem)
+        elif 'circle' == shortTag:
+            if self.section != 'defs':
+                self.elemCircle(elem)
+        elif 'ellipse' == shortTag:
+            if self.section != 'defs':
+                self.elemEllipse(elem)
         elif 'linearGradient' == shortTag:
             self.elemGradient(elem, 'linear')
         elif 'radialGradient' == shortTag:
