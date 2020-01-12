@@ -15,10 +15,15 @@ This script is not extensively tested. Since its dual nature, it is possible
 that the result looks different in Illustrator than in other programs.
 
 ## Installation
-Copy aieps_output.inx and aieps_output.py  into the Inkscape extensions folder:
+Copy aieps_output.inx and aieps_output.py  into the Inkscape extensions folder.
+It is usually in the following location:
 
 * On Windows C:\\Program Files\\Inkscape\\share\\extensions
 * On Linux /usr/share/inkscape/extensions or ~/.config/inkscape/extensions
+
+If you don't have permission to write to system folders or Inkscape does not find
+your extension, you can check where it actually looks for it: in the menu open
+*Edit -> Preferences...*, and in the *System* section look for *User extensions:*.
 
 ## Known limitations
 
