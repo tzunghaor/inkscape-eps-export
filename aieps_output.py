@@ -529,7 +529,7 @@ class svg2eps:
                 i += 7
                 self.curPoint= (cx, cy)
 
-            elif 'z' == cmd:
+            elif 'z' == cmd or 'Z' == cmd:
                 self.pathExplicitClose = True
                 cmd = ''
             else:
