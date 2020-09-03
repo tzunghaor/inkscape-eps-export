@@ -1,6 +1,6 @@
 # inkscape-eps-export
 
-AI compatible EPS export for Inkscape 0.92 (might work with older versions too)
+AI compatible EPS export for Inkscape 1.0 (might work with older versions too)
 
 This script converts an Inkscape SVG to Adobe Illustrator 7 compatible EPS.
 The generated EPS file uses custom Illustrator PS operators, and includes
