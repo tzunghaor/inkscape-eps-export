@@ -37,11 +37,19 @@ def css2dict(css):
     return cssdict
 
 def cssColor2Eps(cssColor, colors='RGB'):
-    """converts css color definition (a hexa code with leading #)
+    """converts css color definition (a hexa code with leading # or 'rgb()')
     to eps color definition"""
-    r = float(int(cssColor[1:3],16)) / 255
-    g = float(int(cssColor[3:5],16)) / 255
-    b = float(int(cssColor[5:7],16)) / 255
+    if '#' == cssColor[0]:
+        r = float(int(cssColor[1:3],16)) / 255
+        g = float(int(cssColor[3:5],16)) / 255
+        b = float(int(cssColor[5:7],16)) / 255
+    else:
+        # assume 'rgb()' color
+        rgb = re.sub('[^0-9]+', ' ', cssColor).strip().split()
+        r = float(int(rgb[0], 10)) / 255
+        g = float(int(rgb[1], 10)) / 255
+        b = float(int(rgb[2], 10)) / 255
+
     if colors == 'RGB':
         return "%f %f %f" % (r, g, b)
     elif colors == 'CMYKRGB':
@@ -220,7 +228,7 @@ class svg2eps:
         if 'stroke' in css and css['stroke'] != 'none':
             self.closeOp = 's'
             self.pathCloseOp = 's'
-            if '#' == css['stroke'][0]:
+            if '#' == css['stroke'][0] or 'rgb' == css['stroke'][0:3]:
                 self.epspath += ' ' + cssColor2Eps(css['stroke']) + ' XA'
             elif 'url' == css['stroke'][0:3]:
                 self.alert("gradient strokes not supported", elem)
@@ -229,7 +237,7 @@ class svg2eps:
                 self.closeOp = 'b'
             else:
                 self.closeOp = 'f'
-            if '#' == css['fill'][0]:
+            if '#' == css['fill'][0] or 'rgb' == css['fill'][0:3]:
                 self.epspath += ' ' + cssColor2Eps(css['fill']) + ' Xa'
             elif 'url' == css['fill'][0:3]:
                 self.gradientFill(elem, css['fill'][5:-1])
@@ -262,8 +270,9 @@ class svg2eps:
             phase = 0
             if css['stroke-dasharray'] == 'none':
                 dashArray = []
-            else:
-                dashArray = list(map(lambda x: "%f" % (self.lengthConv(float(x)),), css['stroke-dasharray'].split(',')))
+            if css['stroke-dasharray'] != 'none':
+                dashArrayIn = css['stroke-dasharray'].replace(',', ' ').split()
+                dashArray = list(map(lambda x: "%f" % (x,), filter(lambda x: x > 0, map(lambda x: self.lengthConv(float(x)), dashArrayIn))))
                 if 'stroke-dashoffset' in css:
                     phase = float(css['stroke-dashoffset'])
 
@@ -316,7 +325,9 @@ class svg2eps:
         self.closeOp = 'n' # pathStyle(elem) will modify this
         self.gradientOp = None
         self.pathExplicitClose = False
-        self.epspath += '\n%AI3_Note: ' + elem.get('id') + '\n'
+        if elem.get('id'):
+            self.epspath += '\n%AI3_Note: ' + elem.get('id') + '\n'
+
         self.pathStyle(elem)
 
         tokens = self.rePathDSplit.split(pathData)
@@ -584,6 +595,10 @@ class svg2eps:
             pathData += " L %f %f A %f %f 0 0 1 %f %f z" % (x+rx, y+height, rx,ry, x, y+height-ry)
         self.elemPath(elem, pathData)
 
+    def elemPolygon(self, elem):
+        pathData = 'M ' + elem.get('points').replace(',', ' ').strip() + ' z'
+        self.elemPath(elem, pathData)        
+
     def elemCircle(self, elem):
         r = float(elem.get('r'))
         self.elemEllipseCircleCommon(elem, r, r)
@@ -782,7 +797,7 @@ class svg2eps:
                 return
             if 'display' in css and css['display'] == 'none':
                 return
-            if shortTag in ('path', 'rect', 'circle', 'ellipse'):
+            if shortTag in ('path', 'rect', 'circle', 'ellipse', 'polygon'):
                 if 'opacity' in css and css['opacity'] == '0':
                     return
                 stroke = False
@@ -815,7 +830,11 @@ class svg2eps:
                 self.epsLayers += "\nq\n"
                 clipPathSave= self.clipPath
                 self.clipPath = True
+                # output clip path even if it doesn't have visible style
+                popRemoveInvisible = self.removeInvisible
+                self.removeInvisible = False
                 self.walkElem(clipElem)
+                self.removeInvisible = popRemoveInvisible
                 self.clipPath = clipPathSave
                 self.epsLayers += ' W'
 
@@ -835,6 +854,9 @@ class svg2eps:
         elif 'ellipse' == shortTag:
             if self.section != 'defs':
                 self.elemEllipse(elem)
+        elif 'polygon' == shortTag:
+            if self.section != 'defs':
+                self.elemPolygon(elem)
         elif 'linearGradient' == shortTag:
             self.elemGradient(elem, 'linear')
         elif 'radialGradient' == shortTag:
