@@ -407,22 +407,32 @@ class svg2eps:
                 self.segmentCommands += 1
             elif 'Q' == cmd:
                 #export quadratic Bezier as cubic
-                x, y = self.coordConv(tokens[i], tokens[i+1])
-                self.epspath += ' %f %f %f %f' % (x, y, x, y)
+                qx0, qy0 = self.coordConv(self.curPoint[0], self.curPoint[1])
+                qx1, qy1 = self.coordConv(float(tokens[i]), float(tokens[i+1]))
                 i += 2
                 self.curPoint = (float(tokens[i]), float(tokens[i+1]))
-                x, y = self.coordConv(self.curPoint[0], self.curPoint[1])
-                self.epspath += ' %f %f' % (x, y)
+                qx2, qy2 = self.coordConv(self.curPoint[0], self.curPoint[1])
+                cx1 = qx1 + 2/3 * (qx1 - qx0)
+                cy1 = qy1 + 2/3 * (qy1 - qy0)
+                cx2 = qx2 + 2/3 * (qx1 - qx2)
+                cy2 = qy2 + 2/3 * (qy1 - qy2)
+                self.epspath += ' %f %f %f %f' % (cx1, cy1, cx2, cy2)
+                self.epspath += ' %f %f' % (qx2, qy2)
                 i += 2
                 self.epspath += ' c'
                 self.segmentCommands += 1
             elif 'q' == cmd:
-                x, y = self.coordConv(self.curPoint[0] + float(tokens[i]), self.curPoint[1] +float(tokens[i+1]))
-                self.epspath += ' %f %f %f %f' % (x, y, x, y)
+                qx0, qy0 = self.coordConv(self.curPoint[0], self.curPoint[1])
+                qx1, qy1 = self.coordConv(self.curPoint[0] + float(tokens[i]), self.curPoint[1] + float(tokens[i+1]))
                 i += 2
                 self.curPoint = (self.curPoint[0] + float(tokens[i]), self.curPoint[1] + float(tokens[i+1]))
-                x, y = self.coordConv(self.curPoint[0], self.curPoint[1])
-                self.epspath += ' %f %f' % (x, y)
+                qx2, qy2 = self.coordConv(self.curPoint[0], self.curPoint[1])
+                cx1 = qx1 + 2/3 * (qx1 - qx0)
+                cy1 = qy1 + 2/3 * (qy1 - qy0)
+                cx2 = qx2 + 2/3 * (qx1 - qx2)
+                cy2 = qy2 + 2/3 * (qy1 - qy2)
+                self.epspath += ' %f %f %f %f' % (cx1, cy1, cx2, cy2)
+                self.epspath += ' %f %f' % (qx2, qy2)
                 i += 2
                 self.epspath += ' c'
                 self.segmentCommands += 1
