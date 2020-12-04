@@ -423,10 +423,11 @@ class svg2eps:
                 i += 2
                 self.curPoint = (float(tokens[i]), float(tokens[i+1]))
                 qx2, qy2 = self.coordConv(self.curPoint[0], self.curPoint[1])
-                cx1 = qx1 + 2/3 * (qx1 - qx0)
-                cy1 = qy1 + 2/3 * (qy1 - qy0)
-                cx2 = qx2 + 2/3 * (qx1 - qx2)
-                cy2 = qy2 + 2/3 * (qy1 - qy2)
+                factor = 2.0 / 3.0
+                cx1 = qx0 + factor * (qx1 - qx0)
+                cy1 = qy0 + factor * (qy1 - qy0)
+                cx2 = qx2 - factor * (qx2 - qx1)
+                cy2 = qy2 - factor * (qy2 - qy1)
                 self.epspath += ' %f %f %f %f' % (cx1, cy1, cx2, cy2)
                 self.epspath += ' %f %f' % (qx2, qy2)
                 i += 2
@@ -438,10 +439,11 @@ class svg2eps:
                 i += 2
                 self.curPoint = (self.curPoint[0] + float(tokens[i]), self.curPoint[1] + float(tokens[i+1]))
                 qx2, qy2 = self.coordConv(self.curPoint[0], self.curPoint[1])
-                cx1 = qx1 + 2/3 * (qx1 - qx0)
-                cy1 = qy1 + 2/3 * (qy1 - qy0)
-                cx2 = qx2 + 2/3 * (qx1 - qx2)
-                cy2 = qy2 + 2/3 * (qy1 - qy2)
+                factor = 2.0 / 3.0
+                cx1 = qx0 + factor * (qx1 - qx0)
+                cy1 = qy0 + factor * (qy1 - qy0)
+                cx2 = qx2 - factor * (qx2 - qx1)
+                cy2 = qy2 - factor * (qy2 - qy1)
                 self.epspath += ' %f %f %f %f' % (cx1, cy1, cx2, cy2)
                 self.epspath += ' %f %f' % (qx2, qy2)
                 i += 2
@@ -700,9 +702,19 @@ class svg2eps:
 
     def elemStop(self, elem):
         """handles <stop> (gradient stop) svg element"""
-        style = css2dict(elem.get('style'))
-        color = cssColor2Eps(style['stop-color'], 'CMYKRGB')
-        offset = float(elem.get('offset')) * 100
+        stopColor = elem.get('stop-color')
+        if not stopColor:
+            style = css2dict(elem.get('style'))
+            if 'stop-color' in style:
+                stopColor = style['stop-color']
+            else:
+                stopColor = '#000000'
+        color = cssColor2Eps(stopColor, 'CMYKRGB')
+        offsetString = elem.get('offset').strip()
+        if offsetString[-1] == '%':
+            offset = float(offsetString[:-1])
+        else:
+            offset = float(offsetString) * 100
         self.gradients[self.curGradientId]['stops'].append( (offset, color) )
 
     def gradientSetup(self):
@@ -1161,7 +1173,7 @@ end
 import sys
 
 if len(sys.argv) < 2:
-    print("missing filename")
+    raise NameError("missing filename")
     exit(1)
 
 converter = svg2eps(sys.argv[1])
