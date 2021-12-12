@@ -118,15 +118,18 @@ class svg2eps:
 
         return (epsx, epsy)
 
-    def matrixMul(self, matrix, matrix2):
-        """multiplies matrix with matrix2"""
-        matrix0 = matrix[:]
-        matrix[0] = matrix0[0] * matrix2[0] + matrix0[2]*matrix2[1] # + matrix0[4]*0
-        matrix[1] = matrix0[1] * matrix2[0] + matrix0[3]*matrix2[1] # + matrix0[5]*0
-        matrix[2] = matrix0[0] * matrix2[2] + matrix0[2]*matrix2[3] # + matrix0[4]*0
-        matrix[3] = matrix0[1] * matrix2[2] + matrix0[3]*matrix2[3] # + matrix0[5]*0
-        matrix[4] = matrix0[0] * matrix2[4] + matrix0[2]*matrix2[5] + matrix0[4]
-        matrix[5] = matrix0[1] * matrix2[4] + matrix0[3]*matrix2[5] + matrix0[5]
+    def multiply_matrix(self, matrix, matrix2):
+        """Returns the result of matrix multiplied by matrix2"""
+        newMatrix = [
+            matrix[0] * matrix2[0] + matrix[2]*matrix2[1], # + matrix[4]*0
+            matrix[1] * matrix2[0] + matrix[3]*matrix2[1], # + matrix[5]*0
+            matrix[0] * matrix2[2] + matrix[2]*matrix2[3], # + matrix[4]*0
+            matrix[1] * matrix2[2] + matrix[3]*matrix2[3], # + matrix[5]*0
+            matrix[0] * matrix2[4] + matrix[2]*matrix2[5] + matrix[4],
+            matrix[1] * matrix2[4] + matrix[3]*matrix2[5] + matrix[5],
+        ]
+
+        return newMatrix
 
 
     def alert(self, string, elem):
@@ -184,8 +187,8 @@ class svg2eps:
             gradientId = gradient['href']
             gradient = self.gradients[gradientId]
         if 'matrix' in transformGradient:
-            self.matrices.append( self.matrices[-1][:] )
-            self.matrixMul(self.matrices[-1],transformGradient['matrix'])
+            newMatrix = self.multiply_matrix(self.matrices[-1],transformGradient['matrix'])
+            self.matrices.append(newMatrix)
 
         if 'linear' == transformGradient['type']:
             gradient['linUseCount'] += 1
@@ -628,46 +631,45 @@ class svg2eps:
 
 
     def attrTransform(self, matrix, transform):
-        """transforms matrix using svg transform attribute"""
+        """Returns new matrix: input matrix transformed using svg transform attribute"""
+        newMatrix = matrix[:]
         for ttype, targs in self.reTransformFind.findall(transform):
             targs = list(map(lambda x: float(x), self.reNumberFind.findall(targs)))
             if ttype == 'matrix':
-                newmatrix = [ targs[0], targs[1],
-                             targs[2], targs[3],
-                             targs[4], targs[5] ]
-                self.matrixMul(matrix, newmatrix)
+                transformMatrix = [targs[0], targs[1], targs[2], targs[3], targs[4], targs[5]]
             elif ttype == 'translate':
                 tx = targs[0]
                 ty = targs[1] if len(targs) > 1 else 0
-                newmatrix = [ 1, 0, 0, 1, tx, ty ]
-                self.matrixMul(matrix, newmatrix)
+                transformMatrix = [1, 0, 0, 1, tx, ty]
             elif ttype == 'scale':
                 sx = targs[0]
                 sy = targs[1] if len(targs) > 1 else sx
-                newmatrix = [ sx, 0, 0, sy, 0, 0 ]
-                self.matrixMul(matrix, newmatrix)
+                transformMatrix = [sx, 0, 0, sy, 0, 0]
             elif ttype == 'rotate':
-                if len(targs) == 1:
+                alpha = targs[0]
+                rotateMatrix = [
+                    math.cos(alpha), math.sin(alpha),
+                    -math.sin(alpha), math.cos(alpha),
+                    0, 0
+                ]
+                if len(targs) == 1: # rotate around 0,0
+                    transformMatrix = rotateMatrix
+                else: # rotate around given coordinates
                     alpha = targs[0]
-                    newmatrix = [ math.cos(alpha), math.sin(alpha),
-                                 -math.sin(alpha), math.cos(alpha),
-                                 0, 0]
-                    self.matrixMul(matrix, newmatrix)
-                else:
-                    alpha = targs[0]
-                    newmatrix = [ 1, 0, 0, 1, targs[1], targs[2] ]
-                    self.matrixMul(matrix, newmatrix)
-                    newmatrix = [ math.cos(alpha), math.sin(alpha),
-                                 -math.sin(alpha), math.cos(alpha),
-                                 0, 0]
-                    self.matrixMul(matrix, newmatrix)
-                    newmatrix = [ 1, 0, 0, 1, -targs[1], -targs[2] ]
-                    self.matrixMul(matrix, newmatrix)
+                    translateMatrix = [1, 0, 0, 1, targs[1], targs[2]]
+                    translateBackMatrix = [1, 0, 0, 1, -targs[1], -targs[2]]
+                    transformMatrix = self.multiply_matrix(translateMatrix, rotateMatrix)
+                    transformMatrix = self.multiply_matrix(transformMatrix, translateBackMatrix)
             elif ttype == 'skewX' or ttype == 'skewY':
-                self.alert("skewX and skewY transformations are not supported", elem)
+                self.alert("skewX and skewY transformations are not supported")
+                continue
             else:
                 print('unknown transform type: ', ttype)
-        return matrix
+                continue
+
+            newMatrix = self.multiply_matrix(newMatrix, transformMatrix)
+
+        return newMatrix
 
     def elemGradient(self, elem, grType):
         """handles <linearGradient> and <radialGradient> svg elements"""
@@ -767,8 +769,8 @@ class svg2eps:
             y = 0
 
         if x != 0 or y != 0:
-            self.matrices.append( self.matrices[-1][:] )
-            self.attrTransform(self.matrices[-1], "translate(%f %f)" % (x, y))
+            newMatrix = self.attrTransform(self.matrices[-1], "translate(%f %f)" % (x, y))
+            self.matrices.append(newMatrix)
 
         href = elem.get('{http://www.w3.org/1999/xlink}href')
         usedElem = self.root.find(".//*[@id='%s']" % (href[1:],))
@@ -829,8 +831,8 @@ class svg2eps:
 
 
         if transform != None:
-            self.matrices.append( self.matrices[-1][:] )
-            self.attrTransform(self.matrices[-1], transform)
+            newMatrix = self.attrTransform(self.matrices[-1], transform)
+            self.matrices.append(newMatrix)
 
         if None != clipPath:
             clipId = clipPath[5:-1]
