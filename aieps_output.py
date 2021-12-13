@@ -334,7 +334,7 @@ class svg2eps:
         self.pathStyle(elem)
 
         tokens = self.rePathDSplit.split(pathData)
-        i = 0
+        i = 0 # index in path tokens
         cmd = '' # path command
         self.curPoint = (0,0)
         self.lastBegin = None
@@ -577,27 +577,21 @@ class svg2eps:
         pathData = ""
         rx = elem.get('rx')
         ry = elem.get('ry')
-        if None == rx and None == ry:
+        if rx == None and ry == None:
             rx = 0
             ry = 0
         else:
             # if only one radius is given, it means both are the same
-            if None == rx:
-                rx = float(ry)
-            else:
-                rx = float(rx)
-            if None == ry:
-                ry = float(rx)
-            else:
-                ry = float(ry)
+            rx = float(rx) if rx != None else float(ry)
+            ry = float(ry) if ry != None else float(rx)
 
         if rx == 0 and ry == 0:
-            pathData = "M %f %f %f %f %f %f %f %f z" % (x,y, x+width,y, x+width, y+height, x, y+height)
+            pathData = "M %f %f %f %f %f %f %f %f z" % (x, y, x + width,y, x + width, y + height, x, y + height)
         else:
-            pathData = "M %f %f A %f %f 0 0 1 %f %f" % (x, y+ry, rx,ry, x+rx, y)
-            pathData += " L %f %f A %f %f 0 0 1 %f %f" % (x+width-rx, y, rx,ry, x+width, y+ry)
-            pathData += " L %f %f A %f %f 0 0 1 %f %f" % (x+width, y+height-ry, rx,ry, x+width-rx, y+height)
-            pathData += " L %f %f A %f %f 0 0 1 %f %f z" % (x+rx, y+height, rx,ry, x, y+height-ry)
+            pathData = "M %f %f A %f %f 0 0 1 %f %f" % (x, y + ry, rx, ry, x+rx, y)
+            pathData += " L %f %f A %f %f 0 0 1 %f %f" % (x + width - rx, y, rx, ry, x + width, y + ry)
+            pathData += " L %f %f A %f %f 0 0 1 %f %f" % (x + width, y + height - ry, rx, ry, x + width - rx, y + height)
+            pathData += " L %f %f A %f %f 0 0 1 %f %f z" % (x + rx, y + height, rx, ry, x, y + height - ry)
         self.elemPath(elem, pathData)
 
     def elemPolygon(self, elem):
