@@ -12,8 +12,9 @@ try:
 except Exception:
 	import xml.etree.ElementTree as ET
 
-import re
 import math
+import re
+import sys
 
 def wrap(text, width):
     """ A word-wrap function that preserves existing line breaks """
@@ -72,6 +73,98 @@ def cssColor2Eps(cssColor, colors='RGB'):
 
         return "%f %f %f %f %f %f %f" % (c, m, y, k, r, g, b)
 
+class Point:
+    """Class representing a 2D point"""
+    def __init__(self, x, y, relativeTo = None):
+        self.x = float(x)
+        self.y = float(y)
+        if isinstance(relativeTo, Point):
+            self.x += relativeTo.x
+            self.y += relativeTo.y
+
+    def get_distance(self, otherPoint):
+        """Returns the distance between this and the other point"""
+        return math.hypot(self.x - otherPoint.x, self.y - otherPoint.y)
+
+    def get_angle(self, otherPoint):
+        """Returns the angle of the vector pointing from this to the other point"""
+        deltax = otherPoint.x - self.x
+        deltay = otherPoint.y - self.y
+        return math.atan2(deltay, deltax) * 180 / math.pi
+
+    def get_manhattan_distance(self, otherPoint):
+        """Returns the manhattan distance of this and the other point"""
+        return abs(self.x - otherPoint.x) + abs(self.y - otherPoint.y)
+
+class TransformationMatrix:
+    """Class representing a 2D transformation matrix"""
+    def __init__(self, matrix = (1, 0, 0, 1, 0, 0)):
+        self.matrix = matrix
+    
+    def multiply(self, matrix):
+        return TransformationMatrix((
+            self.matrix[0] * matrix[0] + self.matrix[2] * matrix[1], # + self.matrix[4] * 0
+            self.matrix[1] * matrix[0] + self.matrix[3] * matrix[1], # + self.matrix[5] * 0
+            self.matrix[0] * matrix[2] + self.matrix[2] * matrix[3], # + self.matrix[4] * 0
+            self.matrix[1] * matrix[2] + self.matrix[3] * matrix[3], # + self.matrix[5] * 0
+            self.matrix[0] * matrix[4] + self.matrix[2] * matrix[5] + self.matrix[4],
+            self.matrix[1] * matrix[4] + self.matrix[3] * matrix[5] + self.matrix[5],
+        ))
+
+    def translate(self, tx, ty):
+        return self.multiply((1, 0, 0, 1, tx, ty))
+
+    def scale(self, sx, sy):
+        return self.multiply((sx, 0, 0, sy, 0, 0))
+
+    def rotate(self, alpha, cx, cy):
+        rotateMatrix = (
+            math.cos(alpha), math.sin(alpha),
+            -math.sin(alpha), math.cos(alpha),
+            0, 0
+        )
+        if cx == 0 and cy == 0:
+            return self.multiply(rotateMatrix)
+
+        newMatrix = self.multiply((1, 0, 0, 1, cx, cy)) # compensate for center
+        newMatrix = newMatrix.multiply(rotateMatrix)
+
+        return newMatrix.multiply((1, 0, 0, 1, -cx, -cy)) # compensate back for center
+
+class TransformationMatrixStack:
+    """2D transformation matrix stack"""
+    def __init__(self, matrix = None):
+        self.matrices = [matrix if matrix != None else TransformationMatrix()]
+
+    def push_matrix_multiply(self, matrix):
+        """Matrix multiplies the current matrix with the passed one, and pushes it on the stack"""
+        currentMatrix = self.matrices[-1]
+        transformedMatrix = currentMatrix.multiply(matrix.matrix)
+        self.matrices.append(transformedMatrix)
+
+    def pop(self):
+        """Removes last matrix from stack"""
+        assert len(self.matrices) > 1, "Cannot pop last matrix from stack"
+        self.matrices.pop()
+
+    def transform_point(self, point):
+        """Transforms the passed point using the current transformation matrix"""
+        # todo: move to TransformationMatrix
+        matrix = self.matrices[-1].matrix
+        transformedX = matrix[0] * point.x + matrix[2] * point.y + matrix[4]
+        transformedY = matrix[1] * point.x + matrix[3] * point.y + matrix[5]
+
+        return Point(transformedX, transformedY)
+
+    def transform_length(self, length):
+        """Transforms the passed length using the current transformation matrix"""
+        # todo: move to TransformationMatrix
+        matrix = self.matrices[-1].matrix
+        transformedX = matrix[0] * length
+        transformedY = matrix[1] * length
+
+        return math.sqrt(transformedX ** 2 + transformedY ** 2)
+
 class svg2eps:
     def __init__(self, filename=None):
         self.filename = filename
@@ -96,41 +189,9 @@ class svg2eps:
         else:
             return number * self.toPt[unit] / self.toPt[toUnit]
 
-    def lengthConv(self, svgLength):
-        """converts svgLength to eps length using the current transformation matrix"""
-        matrix = self.matrices[-1]
-        epsx = matrix[0] * svgLength
-        epsy = matrix[1] * svgLength
-
-        return math.sqrt(epsx*epsx + epsy*epsy)
-
-    def coordConv(self, svgx, svgy, relative=False):
+    def coordConv(self, point):
         """converts svgx, svgy coordinates to eps coordinates using the current transformation matrix"""
-        if relative:
-            svgx = float(svgx) + self.curPoint[0]
-            svgy = float(svgy) + self.curPoint[1]
-        else:
-            svgx = float(svgx)
-            svgy = float(svgy)
-        matrix = self.matrices[-1]
-        epsx = matrix[0] * svgx + matrix[2] * svgy + matrix[4]
-        epsy = matrix[1] * svgx + matrix[3] * svgy + matrix[5]
-
-        return (epsx, epsy)
-
-    def multiply_matrix(self, matrix, matrix2):
-        """Returns the result of matrix multiplied by matrix2"""
-        newMatrix = [
-            matrix[0] * matrix2[0] + matrix[2]*matrix2[1], # + matrix[4]*0
-            matrix[1] * matrix2[0] + matrix[3]*matrix2[1], # + matrix[5]*0
-            matrix[0] * matrix2[2] + matrix[2]*matrix2[3], # + matrix[4]*0
-            matrix[1] * matrix2[2] + matrix[3]*matrix2[3], # + matrix[5]*0
-            matrix[0] * matrix2[4] + matrix[2]*matrix2[5] + matrix[4],
-            matrix[1] * matrix2[4] + matrix[3]*matrix2[5] + matrix[5],
-        ]
-
-        return newMatrix
-
+        return self.matrices.transform_point(point)
 
     def alert(self, string, elem):
         """adds an alert to the collection"""
@@ -173,38 +234,36 @@ class svg2eps:
 
         # transform svg units to eps default pt
         scale = self.toPt['uu']
-        self.matrices = [ [scale, 0, 0, -scale, 0, self.docHeight] ]
+
+        self.matrices = TransformationMatrixStack(TransformationMatrix([scale, 0, 0, -scale, 0, self.docHeight]))
 
 
     def gradientFill(self, elem, gradientId):
         """constructs a gradient instance definition in self.gradientOp"""
         if gradientId not in self.gradients:
-            self.alert("fill gradient not defined: "+gradientId, elem )
+            self.alert("fill gradient not defined: " + gradientId, elem)
             return
         gradient = self.gradients[gradientId]
         transformGradient = gradient
         while 'href' in gradient:
             gradientId = gradient['href']
             gradient = self.gradients[gradientId]
+
         if 'matrix' in transformGradient:
-            newMatrix = self.multiply_matrix(self.matrices[-1],transformGradient['matrix'])
-            self.matrices.append(newMatrix)
+            self.matrices.push_matrix_multiply(transformGradient['matrix'])
 
         if 'linear' == transformGradient['type']:
             gradient['linUseCount'] += 1
-            x1, y1 = self.coordConv(transformGradient['x1'], transformGradient['y1'])
-            x2, y2 = self.coordConv(transformGradient['x2'], transformGradient['y2'])
-            deltax = x2 - x1
-            deltay = y2 - y1
-            length = math.sqrt( deltax*deltax + deltay*deltay )
-            angle = math.atan2(deltay, deltax)*180/math.pi
+            point1 = self.coordConv(Point(transformGradient['x1'], transformGradient['y1']))
+            point2 = self.coordConv(Point(transformGradient['x2'], transformGradient['y2']))
+            length = point1.get_distance(point2)
+            angle = point1.get_angle(point2)
 
         elif 'radial' == transformGradient['type']:
             gradient['radUseCount'] += 1
-            cx, cy = self.coordConv(transformGradient['cx'], transformGradient['cy'])
-            # fx, fy = self.coordConv(transformGradient['fx'], transformGradient['fy'])
-            rx, ry = self.coordConv(transformGradient['cx'] + transformGradient['r'], transformGradient['cy'])
-            r = math.sqrt( (rx-cx)*(rx-cx) + (ry-cy)*(ry-cy))
+            center = self.coordConv(Point(transformGradient['cx'], transformGradient['cy']))
+            right = self.coordConv(Point(transformGradient['cx'] + transformGradient['r'], transformGradient['cy']))
+            radius = center.get_distance(right)
 
         if 'matrix' in transformGradient:
             self.matrices.pop()
@@ -213,10 +272,10 @@ class svg2eps:
         if 'linear' == transformGradient['type']:
             #endPathSegment() will substitute appropriate closeOp in %%s
             self.gradientOp = "\nBb 1 (l_%s) %f %f %f %f 1 0 0 1 0 0 Bg %%s 0 BB" % \
-                (gradientId, x1, y1, angle, length)
+                (gradientId, point1.x, point1.y, angle, length)
         elif 'radial' == transformGradient['type']:
             self.gradientOp = "\nBb 1 (r_%s) %f %f 0 %f 1 0 0 1 0 0 Bg %%s 0 BB" % \
-                (gradientId, cx, cy, r)
+                (gradientId, center.x, center.y, radius)
             self.alert("radial gradients will appear circle shaped", elem)
 
 
@@ -252,7 +311,8 @@ class svg2eps:
             else:
                 self.epspath += " 0 XR"
         if 'stroke-width' in css:
-            self.epspath += " %f w" % (self.lengthConv(self.unitConv(css['stroke-width'], 'uu')), )
+            svgWidth = self.unitConv(css['stroke-width'], 'uu')
+            self.epspath += " %f w" % (self.matrices.transform_length(svgWidth), )
         if 'stroke-linecap' in css:
             if css['stroke-linecap'] == 'butt':
                 self.epspath += " 0 J"
@@ -275,7 +335,7 @@ class svg2eps:
                 dashArray = []
             if css['stroke-dasharray'] != 'none':
                 dashArrayIn = css['stroke-dasharray'].replace(',', ' ').split()
-                dashArray = list(map(lambda x: "%f" % (x,), filter(lambda x: x > 0, map(lambda x: self.lengthConv(float(x)), dashArrayIn))))
+                dashArray = list(map(lambda x: "%f" % (x,), filter(lambda x: x > 0, map(lambda x: self.matrices.transform_length(float(x)), dashArrayIn))))
                 if 'stroke-dashoffset' in css:
                     phase = float(css['stroke-dashoffset'])
 
@@ -304,10 +364,9 @@ class svg2eps:
 
         if self.lastBegin != None:
             if (self.pathExplicitClose or autoClose):
-                if abs(self.curPoint[0] - self.lastBegin[0]) + \
-                    abs(self.curPoint[1] - self.lastBegin[1]) > self.closeDist:
-                    x, y = self.coordConv(self.lastBegin[0], self.lastBegin[1])
-                    self.epspath += ' %f %f l' % (x, y)
+                if self.curPoint.get_manhattan_distance(self.lastBegin) > self.closeDist:
+                    lastBeginEps = self.coordConv(self.lastBegin)
+                    self.epspath += ' %f %f l' % (lastBeginEps.x, lastBeginEps.y)
 
             self.epspath += ' ' + closeOp + '\n'
 
@@ -336,7 +395,7 @@ class svg2eps:
         tokens = self.rePathDSplit.split(pathData)
         i = 0 # index in path tokens
         cmd = '' # path command
-        self.curPoint = (0,0)
+        self.curPoint = Point(0,0)
         self.lastBegin = None
 
         while i < len(tokens):
@@ -362,93 +421,68 @@ class svg2eps:
 
             if 'M' == cmd or 'm' == cmd:
                 if 'M' == cmd or ('m' == cmd and i == 1):
-                    self.curPoint = (float(tokens[i]), float(tokens[i+1]))
+                    self.curPoint = Point(float(tokens[i]), float(tokens[i+1]))
                 else:
-                    self.curPoint = (self.curPoint[0] + float(tokens[i]), self.curPoint[1] + float(tokens[i+1]))
+                    self.curPoint = Point(float(tokens[i]), float(tokens[i+1]), self.curPoint)
 
                 self.segmentStartIndex = len(self.epspath)
-                x, y = self.coordConv(self.curPoint[0], self.curPoint[1])
-                self.epspath += ' %f %f' % (x, y)
+                curPointEps = self.coordConv(self.curPoint)
+                self.epspath += ' %f %f' % (curPointEps.x, curPointEps.y)
                 i += 2
                 self.lastBegin = self.curPoint
                 self.epspath += ' m'
                 self.segmentCommands = 1
             elif 'L' == cmd or 'l' == cmd:
                 if 'L' == cmd:
-                    self.curPoint = (float(tokens[i]), float(tokens[i+1]))
+                    self.curPoint = Point(float(tokens[i]), float(tokens[i+1]))
                 else:
-                    self.curPoint = (self.curPoint[0] + float(tokens[i]), self.curPoint[1] + float(tokens[i+1]))
-                x, y = self.coordConv(self.curPoint[0], self.curPoint[1])
-                self.epspath += ' %f %f' % (x, y)
+                    self.curPoint = Point(float(tokens[i]), float(tokens[i+1]), self.curPoint)
+                curPointEps = self.coordConv(self.curPoint)
+                self.epspath += ' %f %f' % (curPointEps.x, curPointEps.y)
                 i += 2
                 self.epspath += ' l'
                 self.segmentCommands += 1
             elif cmd in ['H', 'h', 'V', 'v']:
                 if 'H' == cmd:
-                    self.curPoint = (float(tokens[i]), self.curPoint[1])
+                    self.curPoint = Point(float(tokens[i]), self.curPoint.y)
                 elif 'h' == cmd:
-                    self.curPoint = (self.curPoint[0] + float(tokens[i]), self.curPoint[1])
+                    self.curPoint = Point(float(tokens[i]), 0, self.curPoint)
                 elif 'V' == cmd:
-                    self.curPoint = (self.curPoint[0], float(tokens[i]))
+                    self.curPoint = Point(self.curPoint.x, float(tokens[i]))
                 elif 'v' == cmd:
-                    self.curPoint = (self.curPoint[0], self.curPoint[1] + float(tokens[i]))
-                x, y = self.coordConv(self.curPoint[0], self.curPoint[1])
-                self.epspath += ' %f %f' % (x, y)
+                    self.curPoint = Point(0, float(tokens[i]), self.curPoint)
+                curPointEps = self.coordConv(self.curPoint)
+                self.epspath += ' %f %f' % (curPointEps.x, curPointEps.y)
                 i += 1
                 self.epspath += ' l'
                 self.segmentCommands += 1
-            elif 'C' == cmd:
+            elif cmd in ('C', 'c'):
+                relativeTo = None if cmd == 'C' else self.curPoint
                 for j in range(2):
-                    x, y = self.coordConv(tokens[i], tokens[i+1])
-                    self.epspath += ' %f %f' % (x, y)
+                    controlPointEps = self.coordConv(Point(tokens[i], tokens[i+1], relativeTo))
+                    self.epspath += ' %f %f' % (controlPointEps.x, controlPointEps.y)
                     i += 2
-                self.curPoint = (float(tokens[i]), float(tokens[i+1]))
-                x, y = self.coordConv(self.curPoint[0], self.curPoint[1])
-                self.epspath += ' %f %f' % (x, y)
+                self.curPoint = Point(float(tokens[i]), float(tokens[i+1]), relativeTo)
+                curPointEps = self.coordConv(self.curPoint)
+                self.epspath += ' %f %f' % (curPointEps.x, curPointEps.y)
                 i += 2
                 self.epspath += ' c'
                 self.segmentCommands += 1
-            elif 'c' == cmd:
-                for j in range(2):
-                    x, y = self.coordConv(self.curPoint[0] + float(tokens[i]), self.curPoint[1] +float(tokens[i+1]))
-                    self.epspath += ' %f %f' % (x, y)
-                    i += 2
-                self.curPoint = (self.curPoint[0] + float(tokens[i]), self.curPoint[1] + float(tokens[i+1]))
-                x, y = self.coordConv(self.curPoint[0], self.curPoint[1])
-                self.epspath += ' %f %f' % (x, y)
-                i += 2
-                self.epspath += ' c'
-                self.segmentCommands += 1
-            elif 'Q' == cmd:
+            elif cmd in ('Q', 'q'):
                 #export quadratic Bezier as cubic
-                qx0, qy0 = self.coordConv(self.curPoint[0], self.curPoint[1])
-                qx1, qy1 = self.coordConv(float(tokens[i]), float(tokens[i+1]))
+                relativeTo = None if cmd == 'Q' else self.curPoint
+                q0 = self.coordConv(self.curPoint)
+                q1 = self.coordConv(Point(float(tokens[i]), float(tokens[i+1]), relativeTo))
                 i += 2
-                self.curPoint = (float(tokens[i]), float(tokens[i+1]))
-                qx2, qy2 = self.coordConv(self.curPoint[0], self.curPoint[1])
+                self.curPoint = Point(float(tokens[i]), float(tokens[i+1]), relativeTo)
+                q2 = self.coordConv(self.curPoint)
                 factor = 2.0 / 3.0
-                cx1 = qx0 + factor * (qx1 - qx0)
-                cy1 = qy0 + factor * (qy1 - qy0)
-                cx2 = qx2 - factor * (qx2 - qx1)
-                cy2 = qy2 - factor * (qy2 - qy1)
+                cx1 = q0.x + factor * (q1.x - q0.x)
+                cy1 = q0.y + factor * (q1.y - q0.y)
+                cx2 = q2.x - factor * (q2.x - q1.x)
+                cy2 = q2.y - factor * (q2.y - q1.y)
                 self.epspath += ' %f %f %f %f' % (cx1, cy1, cx2, cy2)
-                self.epspath += ' %f %f' % (qx2, qy2)
-                i += 2
-                self.epspath += ' c'
-                self.segmentCommands += 1
-            elif 'q' == cmd:
-                qx0, qy0 = self.coordConv(self.curPoint[0], self.curPoint[1])
-                qx1, qy1 = self.coordConv(self.curPoint[0] + float(tokens[i]), self.curPoint[1] + float(tokens[i+1]))
-                i += 2
-                self.curPoint = (self.curPoint[0] + float(tokens[i]), self.curPoint[1] + float(tokens[i+1]))
-                qx2, qy2 = self.coordConv(self.curPoint[0], self.curPoint[1])
-                factor = 2.0 / 3.0
-                cx1 = qx0 + factor * (qx1 - qx0)
-                cy1 = qy0 + factor * (qy1 - qy0)
-                cx2 = qx2 - factor * (qx2 - qx1)
-                cy2 = qy2 - factor * (qy2 - qy1)
-                self.epspath += ' %f %f %f %f' % (cx1, cy1, cx2, cy2)
-                self.epspath += ' %f %f' % (qx2, qy2)
+                self.epspath += ' %f %f' % (q2.x, q2.y)
                 i += 2
                 self.epspath += ' c'
                 self.segmentCommands += 1
@@ -461,12 +495,12 @@ class svg2eps:
                 psai = float(tokens[i+2])
                 largeArcFlag = int(tokens[i + 3])
                 fS = int(tokens[i+4])
-                rx = self.curPoint[0]
-                ry = self.curPoint[1]
+                rx = self.curPoint.x
+                ry = self.curPoint.y
                 if 'A' == cmd:
                     cx, cy = (float(tokens[i+5]), float(tokens[i+6]))
                 else:
-                    cx, cy = (self.curPoint[0] +float(tokens[i+5]), self.curPoint[1] +float(tokens[i+6]))
+                    cx, cy = (self.curPoint.x + float(tokens[i+5]), self.curPoint.y +float(tokens[i+6]))
 
                 if r1 > 0 and r2 > 0:
                     ctx = (rx - cx) / 2
@@ -537,23 +571,23 @@ class svg2eps:
                         dx = -t * (cpsir1*ms + spsir2*mc)
                         dy = -t * (spsir1*ms - cpsir2*mc)
 
-                        cx1, cy1 = self.coordConv(x2,y2)
-                        cx2, cy2 = self.coordConv(x3-dx,y3-dy)
-                        cx3, cy3 = self.coordConv(x3,y3)
+                        c1 = self.coordConv(Point(x2, y2))
+                        c2 = self.coordConv(Point(x3-dx, y3-dy))
+                        c3 = self.coordConv(Point(x3, y3))
 
-                        self.epspath += " %f %f %f %f %f %f c" % (cx1, cy1, cx2, cy2, cx3, cy3)
+                        self.epspath += " %f %f %f %f %f %f c" % (c1.x, c1.y, c2.x, c2.y, c3.x, c3.y)
 
                         x2 = x3 + dx
                         y2 = y3 + dy
                 else:
                     # case when one radius is zero: this is a simple line
-                    x, y = self.coordConv(cx, cy)
-                    self.epspath += ' %f %f l' % (x, y)
+                    pointEps = self.coordConv(Point(cx, cy))
+                    self.epspath += ' %f %f l' % (pointEps.x, pointEps.y)
 
 # Angel Kostadinov end
                 self.segmentCommands += 1
                 i += 7
-                self.curPoint= (cx, cy)
+                self.curPoint = Point(cx, cy)
 
             elif 'z' == cmd or 'Z' == cmd:
                 self.pathExplicitClose = True
@@ -624,36 +658,28 @@ class svg2eps:
         self.elemPath(elem, pathData)
 
 
-    def attrTransform(self, matrix, transform):
-        """Returns new matrix: input matrix transformed using svg transform attribute"""
-        newMatrix = matrix[:]
+    def transform_attr_to_matrix(self, transform):
+        """Converts a svg transform attribute to a transformation matrix"""
+        matrix = TransformationMatrix()
         for ttype, targs in self.reTransformFind.findall(transform):
             targs = list(map(lambda x: float(x), self.reNumberFind.findall(targs)))
             if ttype == 'matrix':
-                transformMatrix = [targs[0], targs[1], targs[2], targs[3], targs[4], targs[5]]
+                matrix = matrix.multiply((targs[0], targs[1], targs[2], targs[3], targs[4], targs[5]))
             elif ttype == 'translate':
                 tx = targs[0]
                 ty = targs[1] if len(targs) > 1 else 0
-                transformMatrix = [1, 0, 0, 1, tx, ty]
+                matrix = matrix.translate(tx, ty)
             elif ttype == 'scale':
                 sx = targs[0]
                 sy = targs[1] if len(targs) > 1 else sx
-                transformMatrix = [sx, 0, 0, sy, 0, 0]
+                matrix = matrix.scale(sx, sy)
             elif ttype == 'rotate':
                 alpha = targs[0]
-                rotateMatrix = [
-                    math.cos(alpha), math.sin(alpha),
-                    -math.sin(alpha), math.cos(alpha),
-                    0, 0
-                ]
-                if len(targs) == 1: # rotate around 0,0
-                    transformMatrix = rotateMatrix
-                else: # rotate around given coordinates
-                    alpha = targs[0]
-                    translateMatrix = [1, 0, 0, 1, targs[1], targs[2]]
-                    translateBackMatrix = [1, 0, 0, 1, -targs[1], -targs[2]]
-                    transformMatrix = self.multiply_matrix(translateMatrix, rotateMatrix)
-                    transformMatrix = self.multiply_matrix(transformMatrix, translateBackMatrix)
+                if len(targs) == 1:
+                    cx, cy = 0, 0
+                else:
+                    cx, cy = targs[1], targs[2]
+                matrix = matrix.rotate(alpha, cx, cy)
             elif ttype == 'skewX' or ttype == 'skewY':
                 self.alert("skewX and skewY transformations are not supported")
                 continue
@@ -661,9 +687,7 @@ class svg2eps:
                 print('unknown transform type: ', ttype)
                 continue
 
-            newMatrix = self.multiply_matrix(newMatrix, transformMatrix)
-
-        return newMatrix
+        return matrix
 
     def elemGradient(self, elem, grType):
         """handles <linearGradient> and <radialGradient> svg elements"""
@@ -689,7 +713,7 @@ class svg2eps:
 
             transform = elem.get('gradientTransform')
             if None != transform:
-                self.gradients[elemId]['matrix'] = self.attrTransform([1, 0, 0, 1, 0, 0], transform)
+                self.gradients[elemId]['matrix'] = self.transform_attr_to_matrix(transform)
 
             href = elem.get('{http://www.w3.org/1999/xlink}href')
             if None != href:
@@ -763,8 +787,7 @@ class svg2eps:
             y = 0
 
         if x != 0 or y != 0:
-            newMatrix = self.attrTransform(self.matrices[-1], "translate(%f %f)" % (x, y))
-            self.matrices.append(newMatrix)
+            self.matrices.push_matrix_multiply(self.transform_attr_to_matrix("translate(%f %f)" % (x, y)))
 
         href = elem.get('{http://www.w3.org/1999/xlink}href')
         usedElem = self.root.find(".//*[@id='%s']" % (href[1:],))
@@ -775,17 +798,6 @@ class svg2eps:
 
         if x != 0 or y != 0:
             self.matrices.pop()
-
-    # def elemNamedView(self, elem):
-    #     """handles a <sodipodi:namedview> svg element"""
-    #     newDocumentUnit = elem.get('{http://www.inkscape.org/namespaces/inkscape}document-units')
-    #     if newDocumentUnit in self.toPt and newDocumentUnit != self.documentUnit:
-    #         if len(self.matrices) > 0:
-    #             # recalculate scaling transformation to new document unit
-    #             scale = self.toPt[newDocumentUnit] / self.toPt[self.documentUnit]
-    #             self.matrices[-1][0] = scale * self.matrices[-1][0]
-    #             self.matrices[-1][3] = scale * self.matrices[-1][3]
-    #         self.documentUnit = newDocumentUnit
 
     def walkElem(self, elem):
         if '}' in elem.tag:
@@ -825,8 +837,7 @@ class svg2eps:
 
 
         if transform != None:
-            newMatrix = self.attrTransform(self.matrices[-1], transform)
-            self.matrices.append(newMatrix)
+            self.matrices.push_matrix_multiply(self.transform_attr_to_matrix(transform))
 
         if None != clipPath:
             clipId = clipPath[5:-1]
@@ -920,7 +931,7 @@ class svg2eps:
         # if last point of a path is further from first point, then an explicit
         # 'lineto' is written to the first point before 'closepath'
         self.closeDist = 0.1
-        self.matrices = [[1, 0, 0, 1, 0, 0]]
+        self.matrices = TransformationMatrixStack()
         self.cssStack = [{}]
         self.gradients = {}
         self.docHeight = 400
@@ -1166,11 +1177,9 @@ end
 
         return eps
 
-import sys
+# Start of main() entry point
 
-if len(sys.argv) < 2:
-    raise NameError("missing filename")
-    exit(1)
+assert len(sys.argv) >= 2, "missing filename"
 
 converter = svg2eps(sys.argv[1])
 
