@@ -117,10 +117,12 @@ class TransformationMatrix:
     def scale(self, sx, sy):
         return self.multiply((sx, 0, 0, sy, 0, 0))
 
-    def rotate(self, alpha, cx, cy):
+    def rotate(self, alphaDegree, cx, cy):
+        """Applies alpha degree rotation around cx, cy center point to the matrix"""
+        alphaRadian = math.radians(alphaDegree)
         rotateMatrix = (
-            math.cos(alpha), math.sin(alpha),
-            -math.sin(alpha), math.cos(alpha),
+            math.cos(alphaRadian), math.sin(alphaRadian),
+            -math.sin(alphaRadian), math.cos(alphaRadian),
             0, 0
         )
         if cx == 0 and cy == 0:
@@ -730,7 +732,7 @@ class svg2eps:
             else:
                 stopColor = '#000000'
         color = cssColor2Eps(stopColor, 'CMYKRGB')
-        offsetString = elem.get('offset').strip()
+        offsetString = elem.get('offset', '0').strip()
         if offsetString[-1] == '%':
             offset = float(offsetString[:-1])
         else:
